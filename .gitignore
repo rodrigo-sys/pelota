@@ -1,0 +1,8 @@
+pelota-go
+pelota
+pelota-cast
+pelota-source
+pelota-run
+__pycache__/
+.playwright-mcp/
+*.pyc
