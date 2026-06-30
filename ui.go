@@ -3,10 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -39,8 +36,6 @@ const (
 )
 
 var sourceNames = []string{"la18hd", "pelotalibre", "pirlotv"}
-
-var healthClient = &http.Client{Timeout: 3 * time.Second}
 
 // ----- Items -----
 
@@ -204,6 +199,7 @@ type model struct {
 	height            int
 	ready             bool
 	prevState         state
+	statusMsg         string
 }
 
 func initialModel(source Source, name string, web bool, refresh bool) model {
@@ -211,9 +207,9 @@ func initialModel(source Source, name string, web bool, refresh bool) model {
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
 	s.Spinner = spinner.Dot
 
-	mode := modeWebView
+	mode := modeBrowser
 	if web {
-		mode = modeBrowser
+		mode = modeWebView
 	}
 
 	m := model{
@@ -257,47 +253,10 @@ func openBrowserCmd(url string) tea.Cmd {
 	}
 }
 
-func openWebViewCmd(url string) tea.Cmd {
-	return func() tea.Msg {
-		openWebView(url)
-		return playbackDoneMsg{}
-	}
-}
-
 func healthCheckCmd(items []streamItem) tea.Cmd {
 	return func() tea.Msg {
-		updated := make([]streamItem, len(items))
-		copy(updated, items)
-		var wg sync.WaitGroup
-		for i := range updated {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				code, err := checkHealth(updated[idx].link)
-				if err != nil {
-					updated[idx].statusCode = 0
-				} else {
-					updated[idx].statusCode = code
-				}
-			}(i)
-		}
-		wg.Wait()
-		return healthUpdateMsg(updated)
+		return healthUpdateMsg(items)
 	}
-}
-
-func checkHealth(url string) (int, error) {
-	req, err := http.NewRequest("HEAD", url, nil)
-	if err != nil {
-		return 0, err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-	resp, err := healthClient.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	resp.Body.Close()
-	return resp.StatusCode, nil
 }
 
 // ----- Builders -----
@@ -470,6 +429,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case playbackDoneMsg:
+		m.statusMsg = ""
 		m.state = stateStreamList
 		return m, nil
 
@@ -502,6 +462,7 @@ func (m model) matchListUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		list, items := buildStreamListFromEvents(m.events, mi.title, m.width, m.height-4)
 		m.streamList = list
 		m.streamItems = items
+		m.statusMsg = ""
 		m.state = stateStreamList
 		return m, healthCheckCmd(items)
 	case "s":
@@ -523,6 +484,7 @@ func (m model) streamListUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q", "ctrl+c":
 		return m, tea.Quit
 	case "h", "esc":
+		m.statusMsg = ""
 		m.state = stateMatchList
 		return m, nil
 	case "l", "enter":
@@ -535,12 +497,15 @@ func (m model) streamListUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		url := resolveURL(m.source, si.link)
-		m.state = statePlaying
 		switch m.mode {
 		case modeBrowser:
+			m.statusMsg = "Opening in browser..."
+			m.state = statePlaying
 			return m, openBrowserCmd(url)
 		default:
-			return m, openWebViewCmd(url)
+			m.statusMsg = "Opening in WebView..."
+			openWebView(url)
+			return m, nil
 		}
 	case "b":
 		it := m.streamList.SelectedItem()
@@ -551,6 +516,7 @@ func (m model) streamListUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
+		m.statusMsg = "Opening in browser..."
 		m.state = statePlaying
 		return m, openBrowserCmd(resolveURL(m.source, si.link))
 	case "w":
@@ -684,11 +650,17 @@ func (m model) streamListView() string {
 		modeLabel = "browser"
 	}
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Padding(0, 1)
-	help := helpStyle.Render(fmt.Sprintf("l: play (%s)  |  w: switch  |  b: force browser  |  h: back  |  s: source  |  q: quit", modeLabel))
+	help := helpStyle.Render(fmt.Sprintf("l: play (%s)  |  w: switch mode  |  b: force browser  |  h: back  |  s: source  |  q: quit", modeLabel))
+
+	status := ""
+	if m.statusMsg != "" {
+		statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Padding(0, 1)
+		status = "\n" + statusStyle.Render(m.statusMsg)
+	}
 
 	return lipgloss.JoinVertical(lipgloss.Top,
 		m.streamList.View(),
-		help,
+		help+status,
 	)
 }
 

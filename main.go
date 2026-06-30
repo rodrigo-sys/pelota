@@ -13,7 +13,7 @@ import (
 var cacheTTL = 5 * time.Minute
 
 func main() {
-	webFlag := flag.Bool("web", false, "Use browser instead of webview")
+	webFlag := flag.Bool("web", false, "Use webview instead of browser")
 	refreshFlag := flag.Bool("refresh", false, "Force refresh cache")
 	sourceName := flag.String("source", "pelotalibre", "Source provider")
 	flag.Parse()

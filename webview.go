@@ -15,10 +15,12 @@ func openWebView(url string) {
 		openBrowser(url)
 		return
 	}
-	defer w.Destroy()
 
 	w.SetTitle("pelota")
 	w.SetSize(480, 320, webview.HintNone)
 	w.Navigate(url)
-	w.Run()
+	go func() {
+		w.Run()
+		w.Destroy()
+	}()
 }
