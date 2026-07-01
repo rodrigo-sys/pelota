@@ -5,7 +5,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
-	"syscall"
 )
 
 func openBrowser(url string) error {
@@ -18,9 +17,7 @@ func openBrowser(url string) error {
 	default:
 		cmd = exec.Command("xdg-open", url)
 	}
-	if runtime.GOOS != "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	}
+	setDetached(cmd)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	return cmd.Start()
