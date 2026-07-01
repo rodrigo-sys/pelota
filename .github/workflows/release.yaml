@@ -65,7 +65,19 @@ jobs:
           go-version: stable
       - name: Install Linux deps (webview)
         if: matrix.os == 'ubuntu-latest' && matrix.cgo
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.0-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev
+          mkdir -p "$HOME/.local/lib/pkgconfig"
+          cat > "$HOME/.local/lib/pkgconfig/webkit2gtk-4.0.pc" << 'PCEOF'
+Name: webkit2gtk-4.0
+Description: Web content engine for GTK+ (4.0 compat)
+Requires: webkit2gtk-4.1
+Version: 4.1
+Libs:
+Cflags:
+PCEOF
+          echo "PKG_CONFIG_PATH=$HOME/.local/lib/pkgconfig" >> "$GITHUB_ENV"
       - name: Set CGo
         if: matrix.cgo
         run: echo "CGO_ENABLED=1" >> "$GITHUB_ENV"
